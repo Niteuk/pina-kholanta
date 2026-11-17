@@ -1,0 +1,17 @@
+{
+  "name": "pina-kholanta",
+  "version": "0.1.0",
+  "description": "Pina Kho-lanta : bot Discord façon Koh-Lanta (notes de fin de session, MVP et boulet du soir)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.0.0",
+    "discord.js": "^14.16.0",
+    "dotenv": "^16.4.5"
+  }
+}
