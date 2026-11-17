@@ -1,14 +1,26 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const Database = require('better-sqlite3');
+const { DatabaseSync } = require('node:sqlite'); // SQLite intégré à Node.js (>= 22.13), rien à compiler
 const { DEFAULT_CATEGORIES } = require('./config');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-const db = new Database(path.join(DATA_DIR, 'pina-kholanta.db'));
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const db = new DatabaseSync(path.join(DATA_DIR, 'pina-kholanta.db'));
+db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+
+// Petite aide pour exécuter plusieurs écritures d'un bloc (tout ou rien)
+const transaction = (fn) => (...args) => {
+  db.exec('BEGIN');
+  try {
+    const result = fn(...args);
+    db.exec('COMMIT');
+    return result;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+};
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
@@ -110,7 +122,7 @@ const getOpenSession = () =>
 const getVotingSessions = () => db.prepare("SELECT * FROM sessions WHERE status = 'vote'").all();
 const getSession = (id) => db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) ?? null;
 const createSession = (now) =>
-  getSession(db.prepare("INSERT INTO sessions (started_at, status) VALUES (?, 'en_cours')").run(now).lastInsertRowid);
+  getSession(Number(db.prepare("INSERT INTO sessions (started_at, status) VALUES (?, 'en_cours')").run(now).lastInsertRowid));
 const updateSession = (id, { endedAt, voteClosesAt, status }) =>
   db.prepare(`UPDATE sessions SET ended_at = COALESCE(?, ended_at), vote_closes_at = COALESCE(?, vote_closes_at),
               status = ? WHERE id = ?`)
@@ -143,7 +155,7 @@ const getSessionRatings = (sessionId) =>
   db.prepare('SELECT voter_id, target_id, category_id, note FROM ratings WHERE session_id = ?').all(sessionId);
 
 // ---------- Résultats ----------
-const finishSession = db.transaction((sessionId, rows, mvpIds, bouletIds) => {
+const finishSession = transaction((sessionId, rows, mvpIds, bouletIds) => {
   const insert = db.prepare('INSERT OR REPLACE INTO results (session_id, user_id, score, is_mvp, is_boulet) VALUES (?, ?, ?, ?, ?)');
   for (const row of rows) {
     insert.run(sessionId, row.userId, row.score, mvpIds.includes(row.userId) ? 1 : 0, bouletIds.includes(row.userId) ? 1 : 0);
