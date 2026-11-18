@@ -13,6 +13,9 @@ const data = new SlashCommandBuilder()
   .addSubcommand((sc) => sc.setName('classement').setDescription('Classement MVP, boulet ou par catégorie')
     .addStringOption((o) => o.setName('type').setDescription('MVP, Boulet ou une catégorie').setRequired(true).setAutocomplete(true)))
   .addSubcommand((sc) => sc.setName('session').setDescription('Session en cours et temps de présence'))
+  .addSubcommand((sc) => sc.setName('aide').setDescription('Règles du jeu et liste des commandes'))
+  .addSubcommand((sc) => sc.setName('desabonner').setDescription('Ne plus participer aux conseils (ni bulletin, ni note)'))
+  .addSubcommand((sc) => sc.setName('abonner').setDescription('Participer de nouveau aux conseils'))
   .addSubcommandGroup((g) => g.setName('config').setDescription('Réglages (admin)')
     .addSubcommand((sc) => sc.setName('salon-vocal').setDescription('Salon vocal suivi par le bot')
       .addChannelOption((o) => o.setName('salon').setDescription('Salon vocal').setRequired(true)
@@ -92,12 +95,67 @@ async function sessionStatus(interaction) {
   if (!open) {
     parts.push('Aucune session de jeu en cours. Elle démarrera dès que quelqu\'un rejoindra le salon vocal.');
   } else {
-    const lines = session.liveParticipants(open.id).map((p) =>
-      `${p.ms >= MIN_PRESENCE_MS ? '✅' : '⏳'} <@${p.userId}> : ${session.fmtMinutes(p.ms)}${p.inVoice ? '' : ' (parti)'}`);
+    const lines = session.liveParticipants(open.id).map((p) => {
+      const icon = db.isOptedOut(p.userId) ? '🚫' : p.ms >= MIN_PRESENCE_MS ? '✅' : '⏳';
+      return `${icon} <@${p.userId}> : ${session.fmtMinutes(p.ms)}${p.inVoice ? '' : ' (parti)'}`;
+    });
     parts.push(`🔥 **Session #${open.id}** démarrée ${session.ts(open.started_at, 'R')}`,
-      `Éligibilité : ${session.fmtMinutes(MIN_PRESENCE_MS)} en voc`, ...lines);
+      `Éligibilité : ${session.fmtMinutes(MIN_PRESENCE_MS)} en voc (🚫 = désabonné)`, ...lines);
   }
   return reply(interaction, parts.join('\n'));
+}
+
+async function aide(interaction) {
+  const isAdmin = interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
+  const minutes = session.fmtMinutes(MIN_PRESENCE_MS);
+  const embed = new EmbedBuilder()
+    .setColor(0xe67e22)
+    .setTitle('🗿 Pina Kho-lanta : comment ça marche ?')
+    .setDescription([
+      `1. Une **session** s'ouvre quand quelqu'un rejoint le salon vocal du jeu.`,
+      `2. Elle se termine quand le vocal reste vide quelques minutes.`,
+      `3. Ceux qui sont restés au moins **${minutes}** reçoivent un **bulletin en MP** et notent les autres de 1 à 5 dans chaque catégorie. Les notes sont anonymes.`,
+      `4. 🤷 Si tu ne peux pas juger une catégorie, mets **3 · Pas d'avis / neutre**.`,
+      `5. À la clôture du vote, le Totem révèle le **🏆 MVP** et le **🪨 boulet** du soir (meilleure et pire moyenne).`,
+    ].join('\n'))
+    .addFields({
+      name: 'Commandes',
+      value: [
+        '`/pkl aide` : cette aide',
+        '`/pkl profil [joueur]` : stats d\'un joueur',
+        '`/pkl classement <type>` : classement MVP, boulet ou par catégorie',
+        '`/pkl session` : session en cours et temps de présence',
+        '`/pkl desabonner` : ne plus participer aux conseils',
+        '`/pkl abonner` : participer de nouveau',
+      ].join('\n'),
+    });
+  if (isAdmin) {
+    embed.addFields({
+      name: 'Commandes admin',
+      value: [
+        '`/pkl config salon-vocal | salon-resultats | voir` : réglages',
+        '`/pkl categorie ajouter | retirer | liste` : catégories de notes',
+        '`/pkl admin forcer-fin` : terminer la session et lancer le conseil tout de suite',
+        '`/pkl admin annuler` : annuler la session ou le vote en cours',
+      ].join('\n'),
+    });
+  }
+  return reply(interaction, { embeds: [embed] });
+}
+
+async function abonnement(interaction, optedOut) {
+  db.upsertPlayer(interaction.user.id, interaction.member?.displayName ?? interaction.user.username);
+  const already = db.isOptedOut(interaction.user.id) === optedOut;
+  db.setOptedOut(interaction.user.id, optedOut);
+  if (optedOut) {
+    return reply(interaction, already
+      ? 'Tu es déjà désabonné des conseils.'
+      : '🚫 Tu es désabonné : tu ne recevras plus de bulletin et tu ne seras plus noté. '
+        + 'Ça s\'applique dès le prochain conseil. Tape `/pkl abonner` pour revenir.');
+  }
+  return reply(interaction, already
+    ? 'Tu participes déjà aux conseils.'
+    : '✅ Te revoilà dans le jeu ! Tu participeras au prochain conseil.');
 }
 
 // ---------- Admin ----------
@@ -166,6 +224,9 @@ async function execute(interaction) {
   if (sub === 'profil') return profil(interaction);
   if (sub === 'classement') return classement(interaction);
   if (sub === 'session') return sessionStatus(interaction);
+  if (sub === 'aide') return aide(interaction);
+  if (sub === 'desabonner') return abonnement(interaction, true);
+  if (sub === 'abonner') return abonnement(interaction, false);
   return undefined;
 }
 

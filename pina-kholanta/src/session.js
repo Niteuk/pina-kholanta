@@ -12,6 +12,9 @@ const joinTimes = new Map();
 let emptyTimer = null;
 const closeTimers = new Map();
 
+// Note du milieu, à utiliser quand on ne peut pas juger une catégorie
+const NEUTRAL_NOTE = 3;
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const mention = (ids) => ids.map((id) => `<@${id}>`).join(' et ');
 const fmtScore = (score) => score.toFixed(2).replace('.', ',');
@@ -149,8 +152,9 @@ function buildBallotRows(sessionId, targetId, categories, notes) {
       .setCustomId(`rate:${sessionId}:${targetId}:${cat.id}`)
       .setPlaceholder(`${cat.name} : choisis une note`)
       .addOptions([1, 2, 3, 4, 5].map((n) => ({
-        label: `${cat.name} : ${n}/5`,
-        emoji: '⭐',
+        label: n === NEUTRAL_NOTE ? `${cat.name} : ${n}/5 · Pas d'avis / neutre` : `${cat.name} : ${n}/5`,
+        description: n === NEUTRAL_NOTE ? 'À choisir si tu ne peux pas juger cette catégorie' : undefined,
+        emoji: n === NEUTRAL_NOTE ? '🤷' : '⭐',
         value: String(n),
         default: notes.get(cat.id) === n,
       }))),
@@ -167,7 +171,8 @@ async function sendBallots(client, sessionId, eligible, closesAt) {
       await user.send(
         `🗿 **Conseil de la session #${sessionId}**\n`
         + 'Note chaque joueur dans chaque catégorie (1 = bof, 5 = au top). Tes notes sont **anonymes** '
-        + `et tu peux les modifier jusqu'à la clôture ${ts(closesAt, 'R')}.`);
+        + `et tu peux les modifier jusqu'à la clôture ${ts(closesAt, 'R')}.\n`
+        + '💡 Si tu ne peux pas juger une catégorie (ex. : il n\'a pas cuisiné ce soir), mets **3 · Pas d\'avis / neutre**.');
 
       for (const targetId of eligible.filter((id) => id !== voterId)) {
         // 5 menus maximum par message : on découpe si besoin

@@ -81,6 +81,11 @@ if (db.prepare('SELECT COUNT(*) AS n FROM categories').get().n === 0) {
   for (const name of DEFAULT_CATEGORIES) insert.run(name);
 }
 
+// Migration : colonne « désabonné » ajoutée après la première version
+if (!db.prepare('PRAGMA table_info(players)').all().some((c) => c.name === 'opted_out')) {
+  db.exec('ALTER TABLE players ADD COLUMN opted_out INTEGER NOT NULL DEFAULT 0');
+}
+
 // ---------- Réglages ----------
 const getSetting = (key) => db.prepare('SELECT value FROM settings WHERE key = ?').get(key)?.value ?? null;
 const setSetting = (key, value) =>
@@ -92,6 +97,10 @@ const upsertPlayer = (userId, name) =>
   db.prepare(`INSERT INTO players (user_id, name, joined_at) VALUES (?, ?, ?)
               ON CONFLICT(user_id) DO UPDATE SET name = excluded.name`)
     .run(userId, name, Date.now());
+const setOptedOut = (userId, optedOut) =>
+  db.prepare('UPDATE players SET opted_out = ? WHERE user_id = ?').run(optedOut ? 1 : 0, userId);
+const isOptedOut = (userId) =>
+  !!db.prepare('SELECT opted_out FROM players WHERE user_id = ?').get(userId)?.opted_out;
 const getPlayerName = (userId) =>
   db.prepare('SELECT name FROM players WHERE user_id = ?').get(userId)?.name ?? 'Joueur inconnu';
 
@@ -136,7 +145,11 @@ const addPresence = (sessionId, userId, ms) =>
 const getPresence = (sessionId) =>
   db.prepare('SELECT user_id, total_ms, eligible FROM presence WHERE session_id = ? ORDER BY total_ms DESC').all(sessionId);
 const markEligibility = (sessionId, minMs) =>
-  db.prepare('UPDATE presence SET eligible = CASE WHEN total_ms >= ? THEN 1 ELSE 0 END WHERE session_id = ?')
+  // Les joueurs désabonnés ne sont jamais éligibles (ni votants, ni notés)
+  db.prepare(`UPDATE presence SET eligible = CASE
+                WHEN total_ms >= ? AND user_id NOT IN (SELECT user_id FROM players WHERE opted_out = 1) THEN 1
+                ELSE 0 END
+              WHERE session_id = ?`)
     .run(minMs, sessionId);
 const getEligibleIds = (sessionId) =>
   db.prepare('SELECT user_id FROM presence WHERE session_id = ? AND eligible = 1').all(sessionId).map((r) => r.user_id);
@@ -197,7 +210,7 @@ const getCategoryLeaderboard = (categoryName) =>
 
 module.exports = {
   getSetting, setSetting,
-  upsertPlayer, getPlayerName,
+  upsertPlayer, setOptedOut, isOptedOut, getPlayerName,
   listActiveCategories, getCategoriesByIds, addCategory, deactivateCategory,
   getOpenSession, getVotingSessions, getSession, createSession, updateSession,
   addPresence, getPresence, markEligibility, getEligibleIds, isEligible,

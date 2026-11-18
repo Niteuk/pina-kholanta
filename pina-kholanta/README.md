@@ -11,6 +11,8 @@ Le bot désigne ensuite le **MVP** et le **boulet** du soir, et garde les statis
 3. Quand le vocal reste vide **5 min**, la session se termine.
 4. Les joueurs qui ont passé au moins **1 h** en voc sont éligibles (il en faut au moins 3).
 5. Chaque joueur éligible reçoit en **message privé** un bulletin pour noter les autres de 1 à 5 dans chaque catégorie.
+   - Si on ne peut pas juger une catégorie, on met **3 · Pas d'avis / neutre**.
+   - Les joueurs désabonnés (`/pkl desabonner`) ne votent pas et ne sont pas notés.
 6. **15 min** plus tard, le conseil se termine :
    - le score d'un joueur est la moyenne de ses moyennes par catégorie ;
    - le meilleur score est **MVP**, le pire est **boulet** ;
@@ -25,6 +27,9 @@ Le bot désigne ensuite le **MVP** et le **boulet** du soir, et garde les statis
 | `/pkl profil [joueur]` | Sessions, MVP et boulets (nombre et %), moyennes par catégorie |
 | `/pkl classement <type>` | Classement MVP, Boulet ou d'une catégorie (avec autocomplétion) |
 | `/pkl session` | Session en cours, temps de chacun, vote en cours |
+| `/pkl aide` | Règles du jeu et liste des commandes |
+| `/pkl desabonner` | Ne plus participer aux conseils (ni bulletin, ni note) |
+| `/pkl abonner` | Participer de nouveau aux conseils |
 | `/pkl config salon-vocal <salon>` | *(admin)* Salon vocal suivi |
 | `/pkl config salon-resultats <salon>` | *(admin)* Salon où sont publiés les résultats |
 | `/pkl config voir` | *(admin)* Configuration actuelle |
@@ -51,7 +56,7 @@ Les commandes admin demandent la permission **Gérer le serveur**.
 
 La plupart des hébergeurs gratuits de bots ont un panneau du même genre :
 
-1. Crée un serveur ou une application **Node.js** et choisis la **version 22** si on te le propose.
+1. Crée un serveur ou une application **Node.js** et choisis la **version 22 ou plus récente** si on te le propose.
 2. Envoie les fichiers du projet, **sans** `node_modules/` ni `data/`.
 3. Renseigne les variables d'environnement `DISCORD_TOKEN` et `GUILD_ID`. Si le panneau ne le permet pas, copie `.env.example` en `.env` et remplis-le.
 4. Indique le fichier de démarrage : `src/index.js` (ou la commande `npm start`).
